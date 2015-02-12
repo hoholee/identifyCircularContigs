@@ -4,42 +4,41 @@ type blastn >/dev/null 2>&1 || { echo >&2 "Blastn not in \$PATH. Aborting."; exi
 type parallel >/dev/null 2>&1 || { echo >&2 "GNU Parallel not in \$PATH. Aborting."; exit 1; }
 
 if [ -z "$1" ] || [ -z "$2" ]
-  then
-  echo ""
-  echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
-  echo "*                                                           *"
-  echo "*  identifyCircularContigs rapidly screens multifasta files *"
-  echo "*  for sequences where 5'-end and 3'-end align with 100%    *"
-  echo "*  identity indicating possible circular topology. Please   *"
-  echo "*  cite https://github.com/sheikki/identifyCircularContigs  *"
-  echo "*                                                           *"
-  echo "*  author: heikki.salavirta@vtt.fi 12 Feb 2015              *"
-  echo "*                                                           *"
-  echo "*  usage: identifyCircularContigs file.fasta minimumLength  *"
-  echo "*                                                           *"
-  echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
-  echo ""
-  exit 0
+	then
+	echo ""
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+	echo "*                                                           *"
+	echo "*  identifyCircularContigs rapidly screens multifasta files *"
+	echo "*  for sequences where 5'-end and 3'-end align with 100%    *"
+	echo "*  identity indicating possible circular topology. Please   *"
+	echo "*  cite https://github.com/sheikki/identifyCircularContigs  *"
+	echo "*                                                           *"
+	echo "*  author: heikki.salavirta@vtt.fi 12 Feb 2015              *"
+	echo "*                                                           *"
+	echo "*  usage: identifyCircularContigs file.fasta minimumLength  *"
+	echo "*                                                           *"
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+	echo ""
+	exit 0
 else
-  FILE=$(basename "$1")
-  NAME=$(echo "${FILE%.*}") 
-  mkdir $NAME
-  cat $1 | awk '!/^>/ { printf "%s", $0; n = "\n" } /^>/ { print n $0; n = "" } END { printf "%s", n }' | awk -v min="$2" 'BEGIN {RS = ">" ; ORS = ""} length($2) >= min {print ">"$0}' > $NAME/file.fna
-  touch blast.tsv
+	FILE=$(basename "$1")
+	NAME=$(echo "${FILE%.*}") 
+	mkdir $NAME
+	cat $1 | awk '!/^>/ { printf "%s", $0; n = "\n" } /^>/ { print n $0; n = "" } END { printf "%s", n }' | awk -v min="$2" 'BEGIN {RS = ">" ; ORS = ""} length($2) >= min {print ">"$0}' > $NAME/file.fna
+	touch blast.tsv
 
-  blastFunction() {
-    BLAST=$(blastn -query $1 -subject $1 -outfmt 6 -perc_identity 100 -ungapped)
-    LENGTH=$(echo "$BLAST" | head -n1 | cut -f4)
-    REST=$(echo "$BLAST" | tail -n +2)
-    echo "$REST" | grep -w "$LENGTH" | awk '{if($7==1 || $8==1 || $9==1 || $10==1) print}' >> blast.tsv
-    rm $1
+	blastFunction() {
+		BLAST=$(blastn -query $1 -subject $1 -outfmt 6 -perc_identity 100 -ungapped)
+		LENGTH=$(echo "$BLAST" | head -n1 | cut -f4)
+		REST=$(echo "$BLAST" | tail -n +2)
+		echo "$REST" | grep -w "$LENGTH" | awk '{if($7==1 || $8==1 || $9==1 || $10==1) print}' >> blast.tsv
+		rm $1
 	}
 
-  export -f blastFunction
-  #split the multifasta into individual seqs
 	cat $NAME/file.fna | parallel --recstart '>' -N1 --pipe "cat - > $NAME/seq.{#}"
-  find $NAME/ -type f -maxdepth 1 -iname "seq.*" | parallel blastFunction
-  mv blast.tsv $NAME/
+	export -f blastFunction
+	find $NAME/ -type f -maxdepth 1 -iname "seq.*" | parallel blastFunction
+	mv blast.tsv $NAME/
 	cut -f1 $NAME/blast.tsv | sort -u > $NAME/circularContigs.id
 	grep -A 1 -w -f $NAME/circularContigs.id $NAME/file.fna | sed 's/^--//g' | grep . > $NAME/$NAME.circularContigs.fna
 	rm $NAME/file.fna $NAME/circularContigs.id
